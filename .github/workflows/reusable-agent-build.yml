@@ -1,0 +1,89 @@
+name: Reusable Agent Build
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+
+      dockerfile:
+        required: true
+        type: string
+
+      npm_package:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Get latest npm version
+        id: npm
+        run: |
+          VERSION=$(npm view ${{ inputs.npm_package }} version)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check existing image tag
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.npm.outputs.version }}"
+
+          EXISTS=$(gh api \
+            /users/${{ github.repository_owner }}/packages/container/${{ inputs.image_name }}/versions \
+            --jq '.[].metadata.container.tags[]' \
+            2>/dev/null | grep -x "$VERSION" || true)
+
+          if [ "$EXISTS" = "$VERSION" ]; then
+            echo "build=false" >> $GITHUB_OUTPUT
+          else
+            echo "build=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata
+        if: steps.check.outputs.build == 'true'
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ inputs.image_name }}
+          tags: |
+            type=raw,value=${{ steps.npm.outputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push image
+        if: steps.check.outputs.build == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ inputs.dockerfile }}
+          push: true
+          build-args: |
+            VERSION=${{ steps.npm.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
