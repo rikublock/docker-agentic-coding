@@ -16,5 +16,5 @@ jobs:
     uses: ./.github/workflows/reusable-agent-build.yml
     with:
       image_name: codex
-      dockerfile: codex/Dockerfile
+      dockerfile: docker/codex/Dockerfile
       npm_package: "@openai/codex"

@@ -16,5 +16,5 @@ jobs:
     uses: ./.github/workflows/reusable-agent-build.yml
     with:
       image_name: claude
-      dockerfile: claude/Dockerfile
+      dockerfile: docker/claude/Dockerfile
       npm_package: "@anthropic-ai/claude-code"

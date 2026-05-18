@@ -16,5 +16,5 @@ jobs:
     uses: ./.github/workflows/reusable-agent-build.yml
     with:
       image_name: copilot
-      dockerfile: copilot/Dockerfile
+      dockerfile: docker/copilot/Dockerfile
       npm_package: "@github/copilot"
