@@ -81,6 +81,60 @@ You can link the agent CLI helper scripts into your PATH with:
 ln -s "$PWD/scripts/run-codex.sh" ~/.local/bin/codex
 ```
 
+## Host System Restrictions
+
+Some host systems restrict the namespace and mount operations required by Codex's `bubblewrap` sandbox. This is most commonly encountered on Ubuntu and other distributions that restrict unprivileged user namespaces.
+
+Codex may also require additional seccomp permissions for syscalls used by `bubblewrap`.
+
+### AppArmor
+
+Install the Codex AppArmor profile on the **Docker host**:
+
+```sh
+curl -fsSL \
+  https://raw.githubusercontent.com/openai/codex-security/main/docker/codex-security.apparmor \
+  -o codex-security.apparmor
+
+sudo install -m 0644 \
+  codex-security.apparmor \
+  /etc/apparmor.d/codex-security-container
+
+sudo apparmor_parser -r -W \
+  /etc/apparmor.d/codex-security-container
+```
+
+The AppArmor profile is loaded by the host kernel and therefore cannot be installed only inside the container.
+
+### Seccomp
+
+Docker's default seccomp profile may block syscalls required by `bubblewrap`, including namespace and mount-related operations.
+
+Use the Codex-specific seccomp profile instead of disabling seccomp entirely:
+
+```sh
+curl -fsSL \
+  https://raw.githubusercontent.com/openai/codex-security/main/docker/codex-security-seccomp.json \
+  -o codex-seccomp.json
+```
+
+Then run the Codex container with both profiles enabled:
+
+```sh
+docker run --rm -it \
+  -v "$HOME/.codex:/home/ubuntu/.codex" \
+  -v "$PWD:/workspace/$(basename "$PWD")" \
+  -w "/workspace/$(basename "$PWD")" \
+  --shm-size=2gb \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges:true \
+  --security-opt seccomp=./codex-seccomp.json \
+  --security-opt apparmor=codex-security-container \
+  ghcr.io/rikublock/codex:latest
+```
+
+Hosts that already permit the namespace and mount operations required by `bubblewrap` may not need the additional AppArmor configuration.
+
 ## Configuration 
 
 ### Codex
@@ -157,3 +211,7 @@ docker build --build-arg VERSION=0.130.0 -t codex:0.130.0 docker/codex/
 ```
 
 Use the same pattern for `docker/copilot` and `docker/claude`.
+
+## References
+
+- https://github.com/openai/codex-security/blob/main/docker/
