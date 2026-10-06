@@ -81,9 +81,55 @@ You can link the agent CLI helper scripts into your PATH with:
 ln -s "$PWD/scripts/run-codex.sh" ~/.local/bin/codex
 ```
 
-## Codex Chrome MCP config
+## Configuration 
 
-To use Chrome MCP from Codex, keep `--shm-size=2gb` and add this to `~/.codex/config.toml`:
+### Codex
+
+Make changes to the global `~/.codex/config.toml` file.
+
+#### Run without approval prompts
+
+Disabling approval prompts is separate from disabling the sandbox. If you want Codex to work autonomously without giving it unrestricted filesystem access, use:
+
+```toml
+approval_policy = "never"
+```
+
+#### Secret security
+
+Configure filesystem permissions so that local secret files such as `.env` and `.dev.vars` cannot be read by the agent.
+
+```toml
+default_permissions = "workspace-no-secrets"
+
+[permissions.workspace-no-secrets]
+extends = ":workspace"
+
+[permissions.workspace-no-secrets.filesystem]
+glob_scan_max_depth = 8
+
+[permissions.workspace-no-secrets.filesystem.":workspace_roots"]
+"**/.env" = "deny"
+"**/.env.*" = "deny"
+"**/.dev.vars" = "deny"
+"**/.dev.vars.*" = "deny"
+
+[shell_environment_policy]
+ignore_default_excludes = false
+```
+
+The profile inherits the normal `:workspace` permissions while explicitly denying access to common local secret files. Unlike `.gitignore`, these rules are enforced by the Codex filesystem sandbox and prevent the agent from reading matching files.
+
+The shell environment policy additionally filters inherited environment variables with names containing **KEY**, **SECRET**, or **TOKEN**, reducing the risk of exposing secrets that are already present in the environment.
+
+> [!WARNING]
+> **Do not use Codex in YOLO / full-access mode if you rely on these restrictions.**
+>
+> `--yolo` bypasses both approval prompts and sandboxing. In that mode, assume Codex can access `.env`, `.dev.vars`, and other files available to the process.
+
+#### Chrome MCP
+
+To use Chrome MCP from Codex, make sure the container is started with `--shm-size=2gb`, then add the following configuration:
 
 ```toml
 [mcp_servers.chrome-devtools]
